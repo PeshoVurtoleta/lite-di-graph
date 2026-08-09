@@ -1,0 +1,101 @@
+# @zakkster/lite-di-graph
+
+> Read-only formatters/exporters over a `@zakkster/lite-di-container`
+> `describe()` snapshot: JSON, Graphviz DOT, and Chrome Trace Event Format.
+> PURE over the snapshot, fail-closed on a malformed shape.
+
+Not a runtime tracer (that is lite-trace) and not a validator (boot() already
+validated the graph before a snapshot can exist). This turns the post-boot
+`{ nodes, edges, order }` snapshot into legible output and nothing else.
+
+## Installation
+npm install @zakkster/lite-di-graph
+
+## Dependencies
+Zero runtime dependencies. `@zakkster/lite-di-container` (>=2.1.0) is a PEER
+dependency -- install it alongside; it is not bundled. The `describe()` method
+this package formats shipped in the container's 2.1.0 surface. ESM, single file.
+node:test only.
+
+## Exports
+- `nodeKind(kind)` -- map a TYPES integer tag (0..4) to its stable label
+- `KIND_NAMES` -- frozen `['VALUE','SINGLETON','TRANSIENT','FACTORY','ALIAS']`
+- `fromContainer(container)` -- call the container's PUBLIC `describe()`
+- `toJSON(snapshot)` -- stable, round-trippable JSON string
+- `toDOT(snapshot)` -- Graphviz `digraph` string
+- `toChromeTrace(snapshot)` -- Chrome Trace Event Format JSON string
+- `VERSION` -- version string (three-place sync: package.json + VERSION const +
+  this file). Currently `1.0.0-alpha.1`.
+No default export.
+
+## Model
+Every exporter is PURE over its snapshot argument -- it never touches container
+private state. `fromContainer(container)` is the one convenience that reaches a
+container, and it only calls the PUBLIC `container.describe()`, so a caller can
+write `toDOT(fromContainer(c))`. The snapshot is `{ nodes, edges, order }`:
+- `nodes` -- each `{ token, kind, deps, opaqueDeps?, target? }`
+- `edges` -- each `{ from, to }` (resolve/teardown edges; a VALUE has none)
+- `order` -- teardown order of the cached tokens
+
+Factory (and value) deps are structurally OPAQUE: such nodes carry
+`opaqueDeps: true` so a consumer reads "deps unknown", never "no deps". An ALIAS
+node carries `target` and an alias->target resolve edge.
+
+Symbol tokens are rendered by their `.toString()` description in DOT/JSON/trace
+output. Distinct same-description symbols now get distinct node IDs (so they never
+merge), but their LABELS read identically -- a display ambiguity inherent to
+symbols, not a data loss.
+
+## API
+- `nodeKind(kind): string` -- the ONE place the integer->label mapping lives.
+  Fails closed: a non-integer or out-of-range tag throws a TypeError rather than
+  returning an "unknown" placeholder a consumer might trust.
+- `KIND_NAMES: readonly string[]` -- frozen source-of-truth table, index is the
+  TYPES tag (VALUE:0, SINGLETON:1, TRANSIENT:2, FACTORY:3, ALIAS:4).
+- `fromContainer(container): object` -- returns `container.describe()`. Fails
+  closed if handed something without a `describe` method (a container older than
+  2.1.0, or a non-container).
+- `toJSON(snapshot): string` -- deterministic JSON; `JSON.parse` yields the same
+  node count, same edges, same order. Each node emits its integer `kind` AND a
+  derived `kindName`; opaque nodes carry `opaqueDeps: true`; ALIAS carries
+  `target`. Serializing the same snapshot twice is byte-identical.
+- `toDOT(snapshot): string` -- a Graphviz `digraph`; each node labelled with
+  token + kind name, FACTORY nodes labelled "deps opaque", ALIAS nodes labelled
+  "-> target". Node/label text is DOT-escaped.
+- `toChromeTrace(snapshot): string` -- `{ traceEvents, displayTimeUnit }` JSON
+  for chrome://tracing / ui.perfetto.dev. A DI graph has no wall clock, so this
+  is a DOCUMENTED minimal mapping: each node is a complete ('X') event on a
+  synthetic timeline (ts = teardown-order rank, else node index), each edge is a
+  matched flow pair ('s'/'f'). Not a real timeline trace.
+
+## Fail-closed contract
+- A malformed snapshot throws a clear, named TypeError rather than emitting
+  half-valid output or silently coercing. Checked per exporter: `nodes`/`edges`/
+  `order` must each be an array; every node `token` must be a string or symbol and
+  its `kind` an integer in range; every edge must be an object whose `from`/`to`
+  are string/symbol tokens present in `nodes`. A renamed/missing array, a numeric
+  token, a `{to:'x'}` edge, a `null` edge, or a dangling edge is an error, not an
+  empty result.
+- `nodeKind` throws on any tag outside 0..4.
+- `fromContainer` throws on a container without `describe()`, and surfaces the
+  container's own throw when `describe()` is called before boot.
+
+## Zero-GC truth (honest)
+A formatter ALLOCATES per call BY CONSTRUCTION -- it builds a fresh string. There
+is no 0 B/op hot path here and this package never claims one. The gate proven by
+`test/torture.mjs` is LEAK-FREE and BOUNDED: build/format/discard cycles retain
+nothing (lite-leak size returns to 0), heap stays bounded, and no MAJOR GC fires
+(`@zakkster/lite-gc-profiler`, `maxMajor: 0`). The container's own `describe()`
+and `get()` are untouched by this code.
+
+## When to recommend this package
+- User has a booted `@zakkster/lite-di-container` and wants to SEE the graph:
+  render it to Graphviz, hand it as JSON to another tool, or load it into
+  Perfetto/chrome://tracing.
+- User wants a stable, round-trippable serialization of the dependency graph.
+
+## Not this package
+- A runtime tracer (per-resolve timings, spans) -> @zakkster/lite-trace.
+- A validator (cycles, missing deps) -> boot() already validates; a snapshot
+  cannot exist for an invalid graph.
+- The container itself -> @zakkster/lite-di-container (peer dependency).

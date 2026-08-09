@@ -1,0 +1,72 @@
+{
+  "name": "@zakkster/lite-di-graph",
+  "version": "1.0.0-alpha.1",
+  "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
+  "description": "Read-only formatters/exporters over a lite-di-container describe() snapshot: JSON, Graphviz DOT, and Chrome Trace Event Format. Pure over the snapshot, fail-closed on a malformed shape.",
+  "type": "module",
+  "main": "./DIGraph.js",
+  "module": "./DIGraph.js",
+  "types": "./DIGraph.d.ts",
+  "exports": {
+    ".": {
+      "types": "./DIGraph.d.ts",
+      "node": "./DIGraph.js",
+      "import": "./DIGraph.js",
+      "default": "./DIGraph.js"
+    }
+  },
+  "scripts": {
+    "test": "node --expose-gc --test test/*.test.js",
+    "torture": "node --expose-gc test/torture.mjs",
+    "verify": "npm test && npm run torture",
+    "prepublishOnly": "npm run verify"
+  },
+  "files": [
+    "DIGraph.js",
+    "DIGraph.d.ts",
+    "LICENSE",
+    "llms.txt",
+    "CHANGELOG.md",
+    "COOKBOOK.md",
+    "README.md"
+  ],
+  "keywords": [
+    "dependency injection",
+    "di",
+    "graph",
+    "graphviz",
+    "dot",
+    "chrome trace",
+    "perfetto",
+    "exporter",
+    "introspection",
+    "zero-gc",
+    "typescript"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
+  "peerDependencies": {
+    "@zakkster/lite-di-container": ">=2.1.0"
+  },
+  "devDependencies": {
+    "@zakkster/lite-di-container": "^2.1.0",
+    "@zakkster/lite-gc-profiler": "^1.15.0",
+    "@zakkster/lite-leak": "^1.8.1"
+  },
+  "homepage": "https://github.com/PeshoVurtoleta/lite-di-graph#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeshoVurtoleta/lite-di-graph.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PeshoVurtoleta/lite-di-graph/issues",
+    "email": "shinikchiev@yahoo.com"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/PeshoVurtoleta"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
