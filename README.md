@@ -230,7 +230,15 @@ private state. Numbers reproduce with `node --expose-gc test/torture.mjs`.
   bounded-heap gates (leak-free via `@zakkster/lite-leak`, no major GC via
   `@zakkster/lite-gc-profiler`). A formatter allocates by construction, so this
   gate proves leak-free/bounded, not 0 B/op.
-- `npm run verify` -- both, in order. `prepublishOnly` runs `verify`.
+- `npm run example` -- [`examples/export-graph.mjs`](examples/export-graph.mjs): a
+  shipped, self-verifying reference consumer. It boots a real container with one of
+  every registration kind (value / singleton / transient / factory / alias, wired with
+  real deps), snapshots it via `fromContainer`, renders all three formats
+  (`toJSON` / `toDOT` / `toChromeTrace`), and asserts round-trip determinism, the
+  `nodeKind` / `KIND_NAMES` mapping, and the fail-closed throw on malformed input -- with
+  `node:assert`, so a broken contract exits non-zero. It is the downstream proof that
+  the 1.0.0 API works in anger.
+- `npm run verify` -- all three, in order. `prepublishOnly` runs `verify`.
 
 ## What this is not
 
