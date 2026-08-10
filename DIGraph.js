@@ -78,7 +78,9 @@ export function fromContainer(container) {
  * same order. Each node is emitted with its integer `kind` AND a derived
  * `kindName`; FACTORY/VALUE nodes carry `opaqueDeps: true` so a consumer sees
  * "deps unknown", not "no deps"; ALIAS nodes carry `target`. Deterministic: keys
- * are written in a fixed order, arrays preserve snapshot order.
+ * are written in a fixed order, arrays preserve snapshot order. Fails closed on a
+ * dangling edge (a `from`/`to` absent from `nodes`) exactly as toDOT/toChromeTrace
+ * do, so the round-trippable JSON is never a graph the sibling exporters reject.
  *
  * @param {object} snapshot A `describe()` snapshot.
  * @returns {string} A JSON document.
@@ -99,10 +101,18 @@ export function toJSON(snapshot) {
         if (n.target !== undefined) rec.target = tokenKey(n.target);
         outNodes[i] = rec;
     }
+    // Referential-integrity guard, identical to the ID-resolving exporters: every
+    // edge endpoint must name a token present in `nodes`. toJSON emits the display
+    // KEY (tokenKey), not the synthetic id, so the resolved id is discarded -- we
+    // call resolveNodeId purely for its fail-closed check, so a dangling edge is an
+    // error here too and the contract is enforced UNIFORMLY across all exporters.
+    const ids = nodeIdentity(nodes);
     const edges = snapshot.edges;
     const outEdges = new Array(edges.length);
     for (let i = 0; i < edges.length; i++) {
         const e = edges[i];
+        resolveNodeId(ids, e.from, 'toJSON', i, 'from');
+        resolveNodeId(ids, e.to, 'toJSON', i, 'to');
         outEdges[i] = { from: tokenKey(e.from), to: tokenKey(e.to) };
     }
     const order = snapshot.order;

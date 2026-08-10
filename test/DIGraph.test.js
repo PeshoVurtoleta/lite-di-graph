@@ -264,7 +264,9 @@ test('a dangling edge (endpoint absent from nodes) fails closed', () => {
         edges: [{ from: 'a', to: 'ghost' }],
         order: ['a'],
     };
-    // toJSON does not resolve endpoints, but toDOT/toChromeTrace do -- both fail closed.
+    // The fail-closed contract is enforced UNIFORMLY: all three exporters reject a
+    // dangling endpoint (referential integrity), not just the ID-resolving two.
+    assert.throws(() => toJSON(bad), /malformed snapshot -- edge\[0\] to references a token absent/);
     assert.throws(() => toDOT(bad), /malformed snapshot/);
     assert.throws(() => toChromeTrace(bad), /malformed snapshot/);
 });

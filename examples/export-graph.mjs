@@ -134,16 +134,16 @@ throwsOn(() => nodeKind(1.5), 'nodeKind non-integer');
 // structural malformation is rejected by every exporter (here: toJSON).
 throwsOn(() => toJSON({ nodes: 'not-an-array', edges: [], order: [] }), 'toJSON on a non-array nodes');
 throwsOn(() => toJSON({ nodes: snap.nodes, edges: [null], order: [] }), 'toJSON on a null edge');
-// REFERENTIAL integrity (an edge to a token absent from nodes) is enforced by the
-// exporters that resolve node IDs -- toDOT and toChromeTrace. (toJSON is a faithful
-// serializer of the snapshot's SHAPE and does not itself resolve references, so this
-// dangling edge is routed through the exporters that do.)
+// REFERENTIAL integrity (an edge to a token absent from nodes) is enforced by EVERY
+// exporter: a dangling edge is a malformed snapshot, so all three fail closed with
+// the same clear message.
 const dangling = { nodes: snap.nodes, edges: [{ from: 'db', to: 'ghost' }], order: [] };
+throwsOn(() => toJSON(dangling), 'toJSON on a dangling edge');
 throwsOn(() => toDOT(dangling), 'toDOT on a dangling edge');
 throwsOn(() => toChromeTrace(dangling), 'toChromeTrace on a dangling edge');
 throwsOn(() => fromContainer({}), 'fromContainer on a non-container');
 
-out('fail-closed: nodeKind range, structural malformation, dangling edge (DOT/trace), ' +
+out('fail-closed: nodeKind range, structural malformation, dangling edge (all exporters), ' +
     'non-container all threw');
 
 // ---------------------------------------------------------------------------

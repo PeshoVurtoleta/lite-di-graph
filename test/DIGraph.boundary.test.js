@@ -379,15 +379,16 @@ test('fail-closed: edge null / missing-from / missing-to / non-string endpoint a
     allFailClosed({ nodes: [node], edges: [{ from: 'x', to: null }], order: [] }, /invalid 'to'/);
 });
 
-test('fail-closed: a dangling edge endpoint fails closed in the resolving exporters', () => {
+test('fail-closed: a dangling edge endpoint fails closed in EVERY exporter', () => {
     const bad = {
         nodes: [{ token: 'a', kind: TYPES.SINGLETON, deps: [] }],
         edges: [{ from: 'a', to: 'ghost' }],
         order: ['a'],
     };
-    // toJSON does not resolve endpoints against nodes -- documented -- so it does
-    // NOT throw here; the two resolving exporters MUST.
-    assert.doesNotThrow(() => toJSON(bad), 'toJSON does not resolve endpoints');
+    // Referential integrity is part of the fail-closed contract for ALL exporters,
+    // not only the ID-resolving two: a dangling endpoint is a malformed snapshot,
+    // so toJSON throws the same clear message it does everywhere else.
+    assert.throws(() => toJSON(bad), /malformed snapshot -- edge\[0\] to references a token absent/);
     assert.throws(() => toDOT(bad), /malformed snapshot -- edge\[0\] to references a token absent/);
     assert.throws(() => toChromeTrace(bad), /malformed snapshot -- edge\[0\] to references a token absent/);
     // A dangling FROM endpoint too.
@@ -396,6 +397,7 @@ test('fail-closed: a dangling edge endpoint fails closed in the resolving export
         edges: [{ from: 'ghost', to: 'a' }],
         order: ['a'],
     };
+    assert.throws(() => toJSON(badFrom), /edge\[0\] from references a token absent/);
     assert.throws(() => toDOT(badFrom), /edge\[0\] from references a token absent/);
     assert.throws(() => toChromeTrace(badFrom), /edge\[0\] from references a token absent/);
 });

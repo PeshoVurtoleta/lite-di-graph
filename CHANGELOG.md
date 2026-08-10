@@ -5,6 +5,21 @@ follows Keep a Changelog; the project uses semantic versioning. The version is
 synced in three places at once: `package.json`, the `VERSION` const in
 `DIGraph.js`, and this file's top entry.
 
+## [Unreleased]
+
+### Fixed
+- `toJSON` now fails closed on a DANGLING edge (a `from`/`to` referencing a token
+  absent from `nodes`), throwing the same `malformed snapshot -- edge[i] <field>
+  references a token absent from nodes` error that `toDOT`/`toChromeTrace` already
+  threw. Previously `toJSON` emitted such an edge silently, contradicting the
+  documented "checked per exporter" fail-closed contract (llms.txt, README) and
+  producing round-trippable JSON that the sibling exporters would then reject.
+  Referential integrity is now enforced UNIFORMLY across all three exporters via
+  the shared `resolveNodeId` guard. Behavior change: code that previously received
+  JSON from a dangling snapshot now throws -- toward already-documented behavior.
+  A `node:test` case asserting `toJSON` throws on a dangling `from` and a dangling
+  `to` closes the coverage gap (the prior suite asserted the lenient behavior).
+
 ## [1.0.0-alpha.1] - 2026-08-09
 
 First scoped release: a read-only legibility surface over the
@@ -53,4 +68,5 @@ snapshot, fail-closed on a malformed shape.
 - ASCII-only source; zero runtime dependencies (the container is a peer
   dependency, not bundled).
 
+[Unreleased]: https://www.npmjs.com/package/@zakkster/lite-di-graph
 [1.0.0-alpha.1]: https://www.npmjs.com/package/@zakkster/lite-di-graph
