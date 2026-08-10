@@ -1,33 +1,65 @@
 /**
- * T7 -- soak and retention (A-GRAPH-3).
+ * T7 -- soak and retention (A-GRAPH-3). The AUTHORITY is FINALIZATION, not a counter
+ * trick.
  *
- * N=10000 full build/discard cycles: each cycle builds a FRESH container, boots
- * it, takes a describe() snapshot, formats it three ways (toJSON/toDOT/
- * toChromeTrace), discards every string, and shuts the container down. The gates:
+ * N=10000 full build/discard cycles: each cycle builds a FRESH container, boots it,
+ * takes a describe() snapshot, formats it three ways (toJSON/toDOT/toChromeTrace),
+ * discards every string, shuts the container down, and tracks the SNAPSHOT with
+ * lite-leak WITHOUT untracking it. The cleanup (NOOP) and tag (numeric cyc) capture
+ * NOTHING (held-value contract), so the snapshot is held only WEAKLY by the tracker's
+ * FinalizationRegistry. After the loop we settle HARD (>= 10 gc()+tick passes); a
+ * snapshot that was really released is collected and decrements size(), one a formatter
+ * pinned (cached input or output) is not. tracker.size() is then the count of snapshots
+ * V8 could NOT reclaim -- the real leak witness.
  *
- *   - lite-leak tracker.size() === 0 and audit() clean: nothing a snapshot or a
- *     formatter produced outlived its cycle. The tracked resource is the snapshot
- *     object itself (the formatter must not pin it, cache it, or retain any string
- *     built from it). The cleanup closure and the tag NEVER close over the tracked
- *     target (lite-leak held-value contract), or finalization is defeated.
- *   - peak heapUsed <= 2x the post-warmup baseline: no per-cycle accumulation, no
- *     steady-state growth after GC. A formatter allocates per call by construction,
- *     but every allocation is garbage; the heap must return.
+ * (An earlier track+immediate-untrack was VACUOUS: unregister decrements the live
+ * counter synchronously, netting size() to 0 every cycle even if every snapshot were
+ * retained forever, and the retention lane carried NO break control at all. Fixed here
+ * per the promotion-ladder gate 2 -- a retention gate must FAIL on a retained object.)
  *
- * There is no dispose() surface here -- the package is stateless functions -- so,
- * unlike a long-lived-instance package, the ONLY retention risk is a formatter
- * accidentally holding its input snapshot or its output string. This tier proves
- * neither happens.
+ * lite-di-graph is stateless functions -- there is no dispose() surface -- so the ONLY
+ * retention risk is a formatter accidentally holding its input snapshot or its output
+ * string. This tier proves neither happens.
+ *
+ * AUTHORITY GATE: tracker.size() <= RES with a clean audit, RES = max(16, CYCLES/1000).
+ * DI_TORTURE_BREAK=1 retains each snapshot in a module-level sink so it can NEVER be
+ * finalized -> size() stays ~CYCLES and BLOWS RES, tripping the residual gate DIRECTLY.
+ * (In a full run an earlier tier's control may trip first; the soak gate is proven in
+ * isolation: DI_TORTURE_BREAK=1 node -e "import('./test/torture/t7-soak.mjs').then(m=>m.run())".)
+ *
+ * SECONDARY (NOT the authority): a coarse heap-delta backstop bounding one-time growth
+ * only -- deliberately loose. Tracking without untracking holds ~CYCLES leakRecords as
+ * live working set, so the delta is heap-position-dependent; it catches only runaway.
+ * Sub-phase 2 is an independent retain-then-release heap witness (unchanged).
  */
 
 import { Container } from '@zakkster/lite-di-container';
 import { createLeakTracker } from '@zakkster/lite-leak';
 import { toJSON, toDOT, toChromeTrace, fromContainer } from '../../DIGraph.js';
-import { check, STATS } from './harness.mjs';
+import { check, BREAK, STATS } from './harness.mjs';
 
 const CYCLES = 10000;     // N=10000 (A-GRAPH-3)
 const NODES = 8;
+
+/** AUTHORITY residual ceiling. Clean leaves single digits; a real leak leaves ~CYCLES. */
+const RES = Math.max(16, (CYCLES / 1000) | 0); // 16
+
+// SECONDARY loose catastrophe backstop (NOT the authority -- the residual is). Bounds
+// ONE-TIME growth well above the observed plateau; re-anchored after measuring (see
+// banner). Tracking without untracking holds ~CYCLES leakRecords live.
+const HEAP_DELTA_LIMIT = 2 * 1024 * 1024;
 const NOOP = function () {};
+
+/** BREAK: retains each snapshot so it can NEVER be finalized -> size() stays ~CYCLES. */
+const sink = [];
+
+/** Hard settle: run FinalizationRegistry callbacks to ground before reading size(). */
+async function settleHard() {
+    for (let i = 0; i < 10; i++) {
+        globalThis.gc();
+        await new Promise((r) => setTimeout(r, 15));
+    }
+}
 
 export async function run() {
     const tracker = createLeakTracker({
@@ -37,7 +69,6 @@ export async function run() {
 
     globalThis.gc();
     const heapBaseline = process.memoryUsage().heapUsed;
-    let heapPeak = heapBaseline;
 
     for (let cyc = 0; cyc < CYCLES; cyc++) {
         const c = new Container();
@@ -61,33 +92,33 @@ export async function run() {
         check(j.length > 0 && d.length > 0 && t.length > 0,
             () => `T7: cycle ${cyc} produced an empty formatting`);
 
-        // Track the SNAPSHOT (not the container): the formatter must not pin it.
-        // cleanup/tag must NOT close over the tracked target (held-value contract).
-        const h = tracker.track(snap, NOOP, cyc);
-
         await c.shutdown();
-        tracker.untrack(h);
 
-        if ((cyc & 1023) === 0) {
-            globalThis.gc();
-            const used = process.memoryUsage().heapUsed;
-            if (used > heapPeak) heapPeak = used;
-        }
+        // AUTHORITY: track the SNAPSHOT without untracking. cleanup/tag capture nothing
+        // (held-value contract), so finalization decides its fate. A released snapshot
+        // is collected (size--); a formatter-pinned one is not.
+        tracker.track(snap, NOOP, cyc);
+        if (BREAK) sink.push(snap); // pin -> can NEVER be finalized -> size() stays ~CYCLES.
     }
 
-    globalThis.gc();
-    const finalUsed = process.memoryUsage().heapUsed;
-    if (finalUsed > heapPeak) heapPeak = finalUsed;
+    await settleHard();
 
-    check(tracker.size() === 0, () => `T7: lite-leak tracker leaked ${tracker.size()} resources`);
+    const residual = tracker.size();
     const findings = tracker.audit();
-    STATS.leakSize = tracker.size();
-    STATS.leakTarget = 0;
+    STATS.leakSize = residual;
+    STATS.leakTarget = RES;
     STATS.findings = findings.length;
-    check(findings.length === 0, () => `T7: lite-leak reported ${findings.length} findings`);
 
-    check(heapPeak <= 2 * heapBaseline,
-        () => `T7: peak heap ${(heapPeak / 1024).toFixed(0)} KB > 2x baseline ${(heapBaseline / 1024).toFixed(0)} KB`);
+    check(findings.length === 0, () => `T7: lite-leak reported ${findings.length} findings`);
+    // AUTHORITY: finalization residual. A real leak (pinned snapshot) leaves ~CYCLES.
+    check(residual <= RES,
+        () => `T7: AUTHORITY finalization residual size()=${residual} > ${RES} -- a snapshot outlived its cycle`);
+
+    const heapAfter = process.memoryUsage().heapUsed;
+    const delta = heapAfter - heapBaseline;
+    // SECONDARY (NOT the authority): coarse one-time-growth backstop.
+    check(delta < HEAP_DELTA_LIMIT,
+        () => `T7.heap: (secondary) soak heap delta ${(delta / 1024).toFixed(1)} KB >= ${(HEAP_DELTA_LIMIT / 1024)} KB`);
 
     // ---- Sub-phase 2: retain-then-release witness ---------------------------
     // A stronger retention proof: format into a batch, keep the batch alive across
@@ -108,7 +139,8 @@ export async function run() {
     c2.boot();
     const snap2 = fromContainer(c2);
     for (let i = 0; i < BATCH; i++) held[i] = toJSON(snap2);
-    // Sanity: held output is real and independent (distinct string instances).
+    // Sanity: the formatter is deterministic -- the same snapshot yields equal output
+    // across the batch (value equality; not a claim about instance identity).
     check(held[0] === held[BATCH - 1], () => 'T7.hold: deterministic formatter produced diverging output');
 
     for (let i = 0; i < BATCH; i++) held[i] = null; // release
@@ -118,7 +150,7 @@ export async function run() {
     check(holdFinal <= 2 * holdBaseline,
         () => `T7.hold: heap ${(holdFinal / 1024).toFixed(0)} KB > 2x baseline ${(holdBaseline / 1024).toFixed(0)} KB after release`);
 
-    process.stderr.write('T7 soak: ' + CYCLES + ' build/format/discard cycles clean, leak size=' +
-        tracker.size() + ' peak=' + (heapPeak / 1024).toFixed(0) + ' KB baseline=' +
-        (heapBaseline / 1024).toFixed(0) + ' KB\n');
+    process.stderr.write('T7 soak: ' + CYCLES + ' build/format/discard cycles clean' +
+        ' | AUTHORITY residual size()=' + residual + '/' + RES + ' findings=' + findings.length +
+        ' | (secondary) heap delta=' + (delta / 1024).toFixed(1) + ' KB\n');
 }
