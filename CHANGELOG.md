@@ -5,7 +5,13 @@ follows Keep a Changelog; the project uses semantic versioning. The version is
 synced in three places at once: `package.json`, the `VERSION` const in
 `DIGraph.js`, and this file's top entry.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-11
+
+Promotion to stable. The public surface is frozen exactly as shipped at
+`1.0.0-alpha.1` -- `nodeKind`, `KIND_NAMES`, `fromContainer`, `toJSON`, `toDOT`,
+`toChromeTrace`, `VERSION` -- with ONE behavior correction (below) that brings
+`toJSON` into line with its already-documented fail-closed contract before the API
+freezes. No exports added or removed.
 
 ### Fixed
 - `toJSON` now fails closed on a DANGLING edge (a `from`/`to` referencing a token
@@ -19,6 +25,45 @@ synced in three places at once: `package.json`, the `VERSION` const in
   JSON from a dangling snapshot now throws -- toward already-documented behavior.
   A `node:test` case asserting `toJSON` throws on a dangling `from` and a dangling
   `to` closes the coverage gap (the prior suite asserted the lenient behavior).
+
+### Changed
+- The retention gate is now a real finalization residual, not a `size() === 0`
+  tautology. The 10,000-cycle build/format/discard soak previously did `track()` then
+  `untrack()` and asserted `size() === 0`; it now tracks each `describe()` snapshot
+  WITHOUT untracking, settles hard, and asserts the finalization residual
+  `size() <= 16`. `DI_TORTURE_BREAK` pins the snapshot so the residual trips the gate
+  DIRECTLY (~10,000), not merely a heap backstop. Clean residual is 0/16. Behavior
+  unchanged -- this is the gate that now PROVES leak-freedom.
+
+### Proven
+- Downstream consumer: `examples/export-graph.mjs`, a self-verifying app that boots a
+  real container with ONE of every registration kind (value / singleton / transient /
+  factory / alias, wired with real deps -> real resolve edges), snapshots it via
+  `fromContainer`, renders all three exporters plus `nodeKind` / `KIND_NAMES` /
+  `VERSION`, and asserts round-trip determinism (endpoint content + byte-identical
+  re-serialize), the integer -> label mapping, and the fail-closed throws (a dangling
+  edge routed through every exporter). Every contract asserted with `node:assert`;
+  `npm run example` is a hard gate folded into `verify` / `prepublishOnly`.
+- `node --expose-gc test/torture.mjs`: a formatter ALLOCATES per call by construction,
+  so this is NOT a 0 B/op path and never claims one; the gate is that
+  build/format/discard cycles retain nothing (finalization residual 0/16), the heap
+  stays bounded, and no MAJOR GC fires (`@zakkster/lite-gc-profiler`, `maxMajor: 0`).
+  The container's own `describe()` / `get()` are untouched. All three break switches
+  (`DI_ASCII_BREAK`, `DI_ALLOC_BREAK`, `DI_TORTURE_BREAK`) force a non-zero exit.
+- `node:test`: 53/53 pass, including a fail-closed case per exporter and the new
+  dangling-edge cases in both the behavior and boundary suites.
+
+### API frozen at 1.0.0
+The public surface is exactly `nodeKind`, `KIND_NAMES`, `fromContainer`, `toJSON`,
+`toDOT`, `toChromeTrace`, and `VERSION`. No default export. Deliberately NOT included
+-- any would be a post-1.0.0 (1.1) change, never a 1.0.x slip:
+- NOT a runtime tracer (per-resolve timings, spans) -- that is lite-trace.
+- NOT a validator (cycles, missing deps) -- `boot()` already validated; a snapshot
+  cannot exist for an invalid graph.
+- NOT the container -- `@zakkster/lite-di-container` (>= 2.1.0) is a PEER dependency.
+- No additional export formats and no mutation surface -- every exporter is PURE over
+  its snapshot argument, and referential integrity is now enforced uniformly across
+  all three.
 
 ## [1.0.0-alpha.1] - 2026-08-09
 
@@ -68,5 +113,5 @@ snapshot, fail-closed on a malformed shape.
 - ASCII-only source; zero runtime dependencies (the container is a peer
   dependency, not bundled).
 
-[Unreleased]: https://www.npmjs.com/package/@zakkster/lite-di-graph
+[1.0.0]: https://www.npmjs.com/package/@zakkster/lite-di-graph
 [1.0.0-alpha.1]: https://www.npmjs.com/package/@zakkster/lite-di-graph
