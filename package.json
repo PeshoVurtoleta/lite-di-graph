@@ -1,6 +1,6 @@
 {
   "name": "@zakkster/lite-di-graph",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0",
   "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
   "description": "Read-only formatters/exporters over a lite-di-container describe() snapshot: JSON, Graphviz DOT, and Chrome Trace Event Format. Pure over the snapshot, fail-closed on a malformed shape.",
   "type": "module",

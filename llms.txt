@@ -25,7 +25,7 @@ node:test only.
 - `toDOT(snapshot)` -- Graphviz `digraph` string
 - `toChromeTrace(snapshot)` -- Chrome Trace Event Format JSON string
 - `VERSION` -- version string (three-place sync: package.json + VERSION const +
-  this file). Currently `1.0.0-alpha.1`.
+  this file). Currently `1.0.0`.
 No default export.
 
 ## Model

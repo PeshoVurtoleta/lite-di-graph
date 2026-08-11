@@ -1,5 +1,5 @@
 /**
- * DIGraph.js -- @zakkster/lite-di-graph (v1.0.0-alpha.1)
+ * DIGraph.js -- @zakkster/lite-di-graph (v1.0.0)
  *
  * Pure formatters/exporters over a container 2.1.0 `describe()` snapshot. This is
  * a READ-ONLY, post-boot legibility surface: it turns the `{ nodes, edges, order }`
@@ -22,7 +22,7 @@
  */
 
 /** Three-place-synced version string (package.json + VERSION const + llms.txt). */
-export const VERSION = '1.0.0-alpha.1';
+export const VERSION = '1.0.0';
 
 // The single source of truth for the TYPES integer -> label mapping. Index is the
 // TYPES tag: VALUE:0, SINGLETON:1, TRANSIENT:2, FACTORY:3, ALIAS:4. Frozen so a

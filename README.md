@@ -140,7 +140,7 @@ TYPES tag.
 
 | Export       | Type                | Meaning                                            |
 | ------------ | ------------------- | -------------------------------------------------- |
-| `VERSION`    | `string`            | Three-place-synced version (`1.0.0-alpha.1`).      |
+| `VERSION`    | `string`            | Three-place-synced version (`1.0.0`).      |
 | `KIND_NAMES` | `readonly string[]` | Frozen `['VALUE','SINGLETON','TRANSIENT','FACTORY','ALIAS']`. |
 
 No default export.
